@@ -5,9 +5,8 @@
 - A meal absorption model that simulates time-to-peak carbohydrate absorption and total absorption duration.
 - A insulin action model that estimates glucose reduction based on insulin dosage and timing.
 - Added exercise and stress effect models that modify glucose trends using intensity and duration factors.
-- Implemented fixed 15-minute time-step forecasting with a 3-hour prediction horizon.
+- Implemented fixed 15-minute time-step forecasting with a 3-hour prediction.
 - Designed user input handling to allow real-world scenario simulation (meal size, insulin dosage, exercise timing, stress events, starting glucose level).
-- Verified baseline behavior across multiple test scenarios.
 
 ## What's Still to Come
 - Continue improving the model to make the glucose predictions as accurate and realistic as possible.
