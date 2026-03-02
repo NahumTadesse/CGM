@@ -8,8 +8,6 @@
   Coordinates the full glucose forecast. Determines which inputs are active at each time step and calls the appropriate models.
 - **SimulationResult**  
   Stores the output of the simulation, including time points and corresponding glucose values.
-- **SimParameters**  
-  Stores configuration values such as the time step and forecast duration.
 - **MinimalModel**  
   Updates the glucose state for each time step using numerical integration.
 - **CarbAbsorption**  
