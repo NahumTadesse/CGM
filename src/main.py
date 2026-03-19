@@ -9,8 +9,8 @@ from simulation.simulator import run_forecast
 
 DT_MIN = 15
 HORIZON_MIN = 180  # 3 hours
-MEAL_T_PEAK_MIN = 75
-MEAL_DURATION_MIN = 240
+MEAL_T_PEAK_MIN = 45
+MEAL_DURATION_MIN = 180
 
 
 def ask_int_range(prompt: str, default: int, lo: int, hi: int) -> int:
@@ -62,7 +62,6 @@ def ask_ampm(default: str) -> str:
 
 
 def ask_time_of_day(label: str, default_h: int, default_m: int, default_ampm: str):
-
     print(f"\n{label} time:")
     h = ask_int_range("  Hour (1-12)", default_h, 1, 12)
     m = ask_int_range("  Minute (0-59)", default_m, 0, 59)
@@ -96,22 +95,163 @@ def in_window(offset_min: int) -> bool:
     return 0 <= offset_min < HORIZON_MIN
 
 
-def plot_cgm(times_dt, glucose):
-    plt.figure()
-    plt.plot(times_dt, glucose)
+def plot_cgm(times_dt, glucose, start_dt, meals=None, doses=None, exercise=None, stress=None):
+    plt.style.use("dark_background")
 
-    ax = plt.gca()
-    ax.set_title("CGM Glucose Forecast (Next 3 Hours)")
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Glucose (mg/dL)")
+    fig, ax = plt.subplots(figsize=(12, 6.5))
 
-    ax.axhline(70, linestyle="--", linewidth=1)
-    ax.axhline(180, linestyle="--", linewidth=1)
+    # Main glucose line
+    ax.plot(
+        times_dt,
+        glucose,
+        linewidth=2.8,
+        marker="o",
+        markersize=5,
+        label="Glucose Forecast"
+    )
+
+    # Fill under curve slightly for a modern look
+    ax.fill_between(times_dt, glucose, [min(glucose)] * len(glucose), alpha=0.12)
+
+    # Target and threshold zones
+    ax.axhspan(70, 180, alpha=0.08, label="Target Range")
+    ax.axhline(70, linestyle="--", linewidth=1.2, alpha=0.85, label="Low Threshold")
+    ax.axhline(180, linestyle="--", linewidth=1.2, alpha=0.85, label="High Threshold")
+
+    # Dynamic y-limits with padding
+    g_min = min(glucose)
+    g_max = max(glucose)
+    y_pad = max(10, (g_max - g_min) * 0.20)
+    y_bottom = max(20, g_min - y_pad)
+    y_top = min(400, g_max + y_pad)
+    ax.set_ylim(y_bottom, y_top)
+
+    # Event marker label positions
+    label_levels = [
+        y_top - (y_top - y_bottom) * 0.10,
+        y_top - (y_top - y_bottom) * 0.22,
+        y_top - (y_top - y_bottom) * 0.34,
+        y_top - (y_top - y_bottom) * 0.46
+    ]
+
+    used_labels = set()
+
+    # Meal markers
+    if meals:
+        for meal in meals:
+            meal_time = start_dt + timedelta(minutes=meal.time_min)
+            legend_label = "Meal Event" if "Meal Event" not in used_labels else None
+            ax.axvline(meal_time, linestyle="--", linewidth=1.5, alpha=0.95, label=legend_label)
+            ax.text(
+                meal_time,
+                label_levels[0],
+                "Meal",
+                rotation=90,
+                va="bottom",
+                ha="center",
+                fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="white", alpha=0.45)
+            )
+            used_labels.add("Meal Event")
+
+    # Insulin markers
+    if doses:
+        for dose in doses:
+            dose_time = start_dt + timedelta(minutes=dose.time_min)
+            legend_label = "Insulin Event" if "Insulin Event" not in used_labels else None
+            ax.axvline(dose_time, linestyle=":", linewidth=1.7, alpha=0.95, label=legend_label)
+            ax.text(
+                dose_time,
+                label_levels[1],
+                "Insulin",
+                rotation=90,
+                va="bottom",
+                ha="center",
+                fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="white", alpha=0.45)
+            )
+            used_labels.add("Insulin Event")
+
+    # Stress start marker
+    if stress is not None:
+        stress_start = start_dt + timedelta(minutes=stress.start_min)
+        legend_label = "Stress Event" if "Stress Event" not in used_labels else None
+        ax.axvline(stress_start, linestyle="-.", linewidth=1.7, alpha=0.95, label=legend_label)
+        ax.text(
+            stress_start,
+            label_levels[2],
+            "Stress",
+            rotation=90,
+            va="bottom",
+            ha="center",
+            fontsize=9,
+            bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="white", alpha=0.45)
+        )
+        used_labels.add("Stress Event")
+
+    # Exercise start marker
+    if exercise is not None:
+        exercise_start = start_dt + timedelta(minutes=exercise.start_min)
+        legend_label = "Exercise Event" if "Exercise Event" not in used_labels else None
+        ax.axvline(exercise_start, linestyle="-", linewidth=1.5, alpha=0.95, label=legend_label)
+        ax.text(
+            exercise_start,
+            label_levels[3],
+            "Exercise",
+            rotation=90,
+            va="bottom",
+            ha="center",
+            fontsize=9,
+            bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="white", alpha=0.45)
+        )
+        used_labels.add("Exercise Event")
+
+    # Last point highlight
+    ax.scatter(times_dt[-1], glucose[-1], s=70, zorder=5)
+    ax.text(
+        times_dt[-1],
+        glucose[-1] + 5,
+        f"{glucose[-1]:.1f} mg/dL",
+        fontsize=9,
+        ha="right",
+        va="bottom",
+        bbox=dict(boxstyle="round,pad=0.25", fc="black", ec="white", alpha=0.5)
+    )
+
+    # Summary info box
+    summary_lines = [
+        f"Start: {glucose[0]:.1f} mg/dL",
+        f"Min:   {min(glucose):.1f} mg/dL",
+        f"Max:   {max(glucose):.1f} mg/dL",
+        f"End:   {glucose[-1]:.1f} mg/dL"
+    ]
+    ax.text(
+        0.015,
+        0.98,
+        "\n".join(summary_lines),
+        transform=ax.transAxes,
+        fontsize=9,
+        va="top",
+        ha="left",
+        bbox=dict(boxstyle="round,pad=0.35", fc="black", ec="white", alpha=0.45)
+    )
+
+    ax.set_title("CGM Glucose Forecast", fontsize=16, fontweight="bold", pad=14)
+    ax.set_xlabel("Time", fontsize=11)
+    ax.set_ylabel("Glucose (mg/dL)", fontsize=11)
+
+    ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.30)
 
     ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=15))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%I:%M %p"))
 
-    plt.gcf().autofmt_xdate()
+    for label in ax.get_xticklabels():
+        label.set_rotation(30)
+        label.set_horizontalalignment("right")
+
+    legend = ax.legend(loc="upper right", framealpha=0.35)
+    legend.get_frame().set_edgecolor("white")
+
     plt.tight_layout()
     plt.show()
 
@@ -233,7 +373,15 @@ def main():
     for t_dt, g in zip(result.times_dt, result.glucose_mgdl):
         print(f"{fmt_time(t_dt)}  G={g:7.2f} mg/dL")
 
-    plot_cgm(result.times_dt, result.glucose_mgdl)
+    plot_cgm(
+        result.times_dt,
+        result.glucose_mgdl,
+        start_dt,
+        meals=meals,
+        doses=doses,
+        exercise=exercise,
+        stress=stress
+    )
 
 
 if __name__ == "__main__":
